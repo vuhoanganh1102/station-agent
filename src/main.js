@@ -23,7 +23,7 @@ let socket = null;
 let isQuitting = false;
 
 const stationId = config.STATION_ID || os.hostname();
-const serverUrl = `https://daniel-unforetellable-uncorrelatively.ngrok-free.dev`;
+const serverUrl = `http://${config.SERVER_IP}:${config.SERVER_PORT}`;
 
 // ============================================================
 // Get local IP
@@ -58,39 +58,57 @@ function getSystemInfo() {
 // Robot controller - uses @nut-tree/nut-js
 // ============================================================
 let robot = null;
+let robotType = null; // 'nutjs' or 'robotjs'
 let keyboard = null;
 let mouse = null;
 let Key = null;
 let Button = null;
+let Point = null;
 
 async function initRobot() {
+  // Try nut-js first
   try {
     const nutjs = require("@nut-tree-fork/nut-js");
     mouse = nutjs.mouse;
     keyboard = nutjs.keyboard;
     Key = nutjs.Key;
     Button = nutjs.Button;
+    Point = nutjs.Point;
 
     // Configure for speed
     mouse.config.mouseSpeed = 2000;
     keyboard.config.autoDelayMs = 0;
 
     robot = nutjs;
+    robotType = "nutjs";
     console.log("✅ nut.js robot initialized");
+
+    // Test mouse access
+    const pos = await mouse.getPosition();
+    console.log(`   Mouse test OK, current position: ${pos.x}, ${pos.y}`);
+    return;
   } catch (e) {
-    console.warn("⚠️ @nut-tree-fork/nut-js not available, trying robotjs...");
-    try {
-      robot = require("robotjs");
-      console.log("✅ robotjs initialized");
-    } catch (e2) {
-      console.error(
-        "❌ No robot library available. Remote control will not work.",
-      );
-      console.error(
-        "   Install: npm install @nut-tree-fork/nut-js  OR  npm install robotjs",
-      );
-    }
+    console.warn(`⚠️ @nut-tree-fork/nut-js not available: ${e.message}`);
   }
+
+  // Fallback to robotjs
+  try {
+    robot = require("robotjs");
+    robotType = "robotjs";
+    console.log("✅ robotjs initialized");
+
+    // Test mouse access
+    const pos = robot.getMousePos();
+    console.log(`   Mouse test OK, current position: ${pos.x}, ${pos.y}`);
+    return;
+  } catch (e) {
+    console.warn(`⚠️ robotjs not available: ${e.message}`);
+  }
+
+  console.error("❌ No robot library available. Remote control will NOT work.");
+  console.error("   Install one of:");
+  console.error("   npm install @nut-tree-fork/nut-js");
+  console.error("   npm install robotjs");
 }
 
 // ============================================================
@@ -209,30 +227,49 @@ function mapKeyToRobotjs(key) {
 // ============================================================
 // Execute remote control commands
 // ============================================================
+// Counter to limit mouse-move logging (only log every 100th move)
+let mouseMoveCount = 0;
+
 async function executeMouseMove(x, y) {
-  if (!robot) return;
+  if (!robot) {
+    return;
+  }
+
+  mouseMoveCount++;
 
   try {
-    if (mouse) {
-      // nut-js
-      const { straightTo, Point } = require("@nut-tree-fork/nut-js");
+    if (robotType === "nutjs" && mouse && Point) {
       await mouse.setPosition(new Point(x, y));
-    } else {
-      // robotjs
+    } else if (robotType === "robotjs") {
       robot.moveMouse(x, y);
     }
+
+    // Log every 100th move to confirm it's working
+    if (mouseMoveCount % 100 === 1) {
+      console.log(
+        `🖱️ mouse-move #${mouseMoveCount}: ${x}, ${y} (robotType=${robotType})`,
+      );
+    }
   } catch (e) {
-    // silent - too frequent to log
+    if (mouseMoveCount % 100 === 1) {
+      console.error(`Mouse move error: ${e.message}`);
+    }
   }
 }
 
 async function executeMouseClick(button, double, x, y) {
-  if (!robot) return;
+  if (!robot) {
+    console.error("❌ robot is null, cannot click");
+    return;
+  }
+
+  console.log(
+    `🖱️ executeMouseClick: robotType=${robotType}, button=${button}, double=${double}, x=${x}, y=${y}`,
+  );
 
   try {
-    if (mouse) {
-      // nut-js
-      const { Point } = require("@nut-tree-fork/nut-js");
+    if (robotType === "nutjs" && mouse && Point) {
+      console.log("   Using nut-js...");
       await mouse.setPosition(new Point(x, y));
 
       const btnMap = {
@@ -247,13 +284,20 @@ async function executeMouseClick(button, double, x, y) {
       } else {
         await mouse.click(btn);
       }
-    } else {
-      // robotjs
+      console.log("   nut-js click done");
+    } else if (robotType === "robotjs") {
+      console.log("   Using robotjs...");
       robot.moveMouse(x, y);
-      robot.mouseClick(button || "left", double);
+      const pos = robot.getMousePos();
+      console.log(`   Mouse moved to: ${pos.x}, ${pos.y}`);
+      robot.mouseClick(button || "left", double ? true : false);
+      console.log("   robotjs click done");
+    } else {
+      console.error(`   ❌ Unknown robotType: ${robotType}`);
     }
   } catch (e) {
     console.error("Mouse click error:", e.message);
+    console.error(e.stack);
   }
 }
 
@@ -261,7 +305,7 @@ async function executeMouseUp(button, x, y) {
   if (!robot) return;
 
   try {
-    if (mouse) {
+    if (robotType === "nutjs" && mouse) {
       const btnMap = {
         left: Button.LEFT,
         right: Button.RIGHT,
@@ -269,7 +313,7 @@ async function executeMouseUp(button, x, y) {
       };
       const btn = btnMap[button] || Button.LEFT;
       await mouse.releaseButton(btn);
-    } else {
+    } else if (robotType === "robotjs") {
       robot.mouseToggle("up", button || "left");
     }
   } catch (e) {
@@ -281,9 +325,18 @@ async function executeMouseScroll(deltaX, deltaY) {
   if (!robot) return;
 
   try {
-    if (mouse) {
-      await mouse.scrollDown(deltaY);
-    } else {
+    if (robotType === "nutjs" && mouse) {
+      if (deltaY > 0) {
+        await mouse.scrollDown(Math.abs(deltaY));
+      } else if (deltaY < 0) {
+        await mouse.scrollUp(Math.abs(deltaY));
+      }
+      if (deltaX > 0) {
+        await mouse.scrollRight(Math.abs(deltaX));
+      } else if (deltaX < 0) {
+        await mouse.scrollLeft(Math.abs(deltaX));
+      }
+    } else if (robotType === "robotjs") {
       robot.scrollMouse(deltaX, deltaY);
     }
   } catch (e) {
@@ -295,13 +348,12 @@ async function executeKeyDown(key, code, modifiers) {
   if (!robot) return;
 
   try {
-    if (keyboard && Key) {
+    if (robotType === "nutjs" && keyboard && Key) {
       const nutKey = mapKeyToNut(key, code);
-      if (nutKey) {
+      if (nutKey != null) {
         await keyboard.pressKey(nutKey);
       }
-    } else {
-      // robotjs - use keyToggle
+    } else if (robotType === "robotjs") {
       const rjKey = mapKeyToRobotjs(key);
       if (rjKey) {
         robot.keyToggle(rjKey, "down", modifiers || []);
@@ -316,12 +368,12 @@ async function executeKeyUp(key, code) {
   if (!robot) return;
 
   try {
-    if (keyboard && Key) {
+    if (robotType === "nutjs" && keyboard && Key) {
       const nutKey = mapKeyToNut(key, code);
-      if (nutKey) {
+      if (nutKey != null) {
         await keyboard.releaseKey(nutKey);
       }
-    } else {
+    } else if (robotType === "robotjs") {
       const rjKey = mapKeyToRobotjs(key);
       if (rjKey) {
         robot.keyToggle(rjKey, "up");
@@ -413,23 +465,63 @@ function connectToServer() {
   });
 
   // ---- Remote control commands (executed in main process) ----
-  socket.on("mouse-move", ({ x, y }) => {
-    executeMouseMove(Math.round(x), Math.round(y));
+
+  // Get actual screen dimensions for coordinate scaling
+  const getScreenSize = () => {
+    const primaryDisplay = screen.getPrimaryDisplay();
+    return {
+      width: primaryDisplay.size.width,
+      height: primaryDisplay.size.height,
+    };
+  };
+
+  // Scale video coordinates to actual screen coordinates
+  const scaleCoords = (x, y, screenWidth, screenHeight) => {
+    const actual = getScreenSize();
+
+    // screenWidth/screenHeight = video stream resolution (from admin)
+    // actual.width/height = real screen resolution on station
+    if (screenWidth && screenHeight) {
+      const scaleX = actual.width / screenWidth;
+      const scaleY = actual.height / screenHeight;
+      return {
+        x: Math.round(x * scaleX),
+        y: Math.round(y * scaleY),
+      };
+    }
+
+    // Fallback: assume coordinates are already correct
+    return { x: Math.round(x), y: Math.round(y) };
+  };
+
+  socket.on("mouse-move", ({ x, y, screenWidth, screenHeight }) => {
+    const scaled = scaleCoords(x, y, screenWidth, screenHeight);
+    executeMouseMove(scaled.x, scaled.y);
   });
 
-  socket.on("mouse-click", ({ button, double, x, y }) => {
-    executeMouseClick(button, double, Math.round(x), Math.round(y));
-  });
+  socket.on(
+    "mouse-click",
+    ({ button, double, x, y, screenWidth, screenHeight }) => {
+      const scaled = scaleCoords(x, y, screenWidth, screenHeight);
+      console.log(
+        `🖱️ Received mouse-click: ${button} at ${x},${y} → scaled ${scaled.x},${scaled.y} (stream=${screenWidth}x${screenHeight}, screen=${getScreenSize().width}x${getScreenSize().height}) double=${double}`,
+      );
+      executeMouseClick(button, double, scaled.x, scaled.y);
+    },
+  );
 
-  socket.on("mouse-up", ({ button, x, y }) => {
-    executeMouseUp(button, Math.round(x), Math.round(y));
+  socket.on("mouse-up", ({ button, x, y, screenWidth, screenHeight }) => {
+    const scaled = scaleCoords(x, y, screenWidth, screenHeight);
+    executeMouseUp(button, scaled.x, scaled.y);
   });
 
   socket.on("mouse-scroll", ({ deltaX, deltaY }) => {
+    console.log(`🖱️ Received scroll: ${deltaX}, ${deltaY}`);
     executeMouseScroll(deltaX, deltaY);
   });
 
   socket.on("key-down", ({ key, code, modifiers }) => {
+    console.log(`⌨️ Received key-down: ${key} (${code})`);
     executeKeyDown(key, code, modifiers);
   });
 
