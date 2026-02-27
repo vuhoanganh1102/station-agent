@@ -23,7 +23,7 @@ let socket = null;
 let isQuitting = false;
 
 const stationId = config.STATION_ID || os.hostname();
-const serverUrl = `http://${config.SERVER_IP}:${config.SERVER_PORT}`;
+const serverUrl = `https://daniel-unforetellable-uncorrelatively.ngrok-free.dev`;
 
 // ============================================================
 // Get local IP
@@ -92,18 +92,18 @@ async function initRobot() {
   }
 
   // Fallback to robotjs
-  try {
-    robot = require("robotjs");
-    robotType = "robotjs";
-    console.log("✅ robotjs initialized");
+  // try {
+  //   robot = require("robotjs");
+  //   robotType = "robotjs";
+  //   console.log("✅ robotjs initialized");
 
-    // Test mouse access
-    const pos = robot.getMousePos();
-    console.log(`   Mouse test OK, current position: ${pos.x}, ${pos.y}`);
-    return;
-  } catch (e) {
-    console.warn(`⚠️ robotjs not available: ${e.message}`);
-  }
+  //   // Test mouse access
+  //   const pos = robot.getMousePos();
+  //   console.log(`   Mouse test OK, current position: ${pos.x}, ${pos.y}`);
+  //   return;
+  // } catch (e) {
+  //   console.warn(`⚠️ robotjs not available: ${e.message}`);
+  // }
 
   console.error("❌ No robot library available. Remote control will NOT work.");
   console.error("   Install one of:");
