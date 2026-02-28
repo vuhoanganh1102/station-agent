@@ -2,6 +2,10 @@
   "name": "station-agent",
   "version": "1.0.0",
   "description": "Remote Net - Station Agent (runs as background service)",
+  "author": {
+    "name": "Vu Hoang Anh",
+    "email": "anhvh1102@gmail.com"
+  },
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
@@ -39,7 +43,6 @@
   "dependencies": {
     "@nut-tree-fork/nut-js": "^4.2.6",
     "electron-store": "^8.1.0",
-    "node-windows": "^1.0.0-beta.8",
     "socket.io-client": "^4.7.2"
   },
   "devDependencies": {
