@@ -635,20 +635,17 @@ function setupIPC() {
     socket?.emit("screenshot", { targetAdminId, image });
   });
 
-  ipcMain.on("get-sources", async (event) => {
+  ipcMain.handle("get-sources", async (event) => {
     try {
       const sources = await desktopCapturer.getSources({
         types: ["screen"],
         thumbnailSize: { width: 1920, height: 1080 },
       });
-      event.reply(
-        "sources-list",
-        sources.map((s) => ({
-          id: s.id,
-          name: s.name,
-          display_id: s.display_id,
-        })),
-      );
+      return sources.map((s) => ({
+        id: s.id,
+        name: s.name,
+        display_id: s.display_id,
+      }));
     } catch (e) {
       console.error("Error getting sources:", e);
       event.reply("sources-list", []);
@@ -725,6 +722,27 @@ function createWindow() {
     },
   });
 
+  // ✅ THÊM: Cho phép media permissions trong production
+  mainWindow.webContents.session.setPermissionRequestHandler(
+    (webContents, permission, callback) => {
+      const allowedPermissions = ["media", "display-capture", "screen"];
+      if (allowedPermissions.includes(permission)) {
+        callback(true);
+      } else {
+        callback(false);
+      }
+    },
+  );
+
+  // ✅ THÊM: Cho phép display media
+  mainWindow.webContents.session.setDisplayMediaRequestHandler(
+    (request, callback) => {
+      desktopCapturer.getSources({ types: ["screen"] }).then((sources) => {
+        callback({ video: sources[0], audio: "loopback" });
+      });
+    },
+  );
+
   mainWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
 
   mainWindow.on("close", (event) => {
@@ -743,6 +761,9 @@ function createWindow() {
 // ============================================================
 // App lifecycle
 // ============================================================
+// Thêm VÀO ĐẦU FILE, trước các require khác
+app.commandLine.appendSwitch("enable-features", "WebRTCPipeWireCapturer");
+app.commandLine.appendSwitch("use-fake-ui-for-media-stream");
 app.on("ready", async () => {
   createWindow();
   createTray();

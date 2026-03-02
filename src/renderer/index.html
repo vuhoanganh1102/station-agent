@@ -82,42 +82,36 @@
           log(`Already sharing with ${adminSocketId}, cleaning up first`);
           stopScreenShare(adminSocketId);
         }
-
         try {
-          // Get sources using promise pattern (preload uses 'once')
-          const sources = await new Promise((resolve) => {
-            window.agentAPI.onSourcesList((sources) => {
-              resolve(sources);
-            });
-            window.agentAPI.getSources();
-          });
+            // ✅ getSources() trả về Promise trực tiếp - dùng await thẳng
+            const sources = await window.agentAPI.getSources();
 
-          if (sources.length === 0) {
-            log("No screen sources available");
-            return;
-          }
+            if (!sources || sources.length === 0) {
+              log("No screen sources available");
+              return;
+            }
 
-          const source = sources[0];
-          log(`Using source: ${source.name} (${source.id})`);
+            const source = sources[0];
+            log(`Using source: ${source.name} (${source.id})`);
 
-          const stream = await navigator.mediaDevices.getUserMedia({
-            audio: false,
-            video: {
-              mandatory: {
-                chromeMediaSource: "desktop",
-                chromeMediaSourceId: source.id,
-                maxWidth: 1920,
-                maxHeight: 1080,
-                maxFrameRate: 30,
+            const stream = await navigator.mediaDevices.getUserMedia({
+              audio: false,
+              video: {
+                mandatory: {
+                  chromeMediaSource: "desktop",
+                  chromeMediaSourceId: source.id,
+                  maxWidth: 1920,
+                  maxHeight: 1080,
+                  maxFrameRate: 30,
+                },
               },
-            },
-          });
+            });
 
-          log("Screen captured successfully");
-          setupPeerConnection(adminSocketId, stream);
-        } catch (e) {
-          log(`Screen capture error: ${e.message}`);
-        }
+            log("Screen captured successfully");
+            setupPeerConnection(adminSocketId, stream);
+          } catch (e) {
+            log(`Screen capture error: ${e.message}`);
+          }
       }
 
       function setupPeerConnection(adminSocketId, stream) {

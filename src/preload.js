@@ -2,7 +2,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("agentAPI", {
   // Get screen sources - uses 'once' to prevent listener accumulation
-  getSources: () => ipcRenderer.send("get-sources"),
+  getSources: () => ipcRenderer.invoke("get-sources"),
   onSourcesList: (callback) => {
     ipcRenderer.removeAllListeners("sources-list"); // remove old listeners
     ipcRenderer.once("sources-list", (event, sources) => callback(sources)); // fire once only
