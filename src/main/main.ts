@@ -703,20 +703,21 @@ function updateTrayTooltip(status: string): void {
 // ─── WINDOW ──────────────────────────────────────────────────────────────────
 function createWindow(): void {
   const display = screen.getPrimaryDisplay();
+  const isDev = process.env.NODE_ENV === "development";
 
   mainWindow = new BrowserWindow({
-    width: display.size.height,
-    height: display.size.height,
-    x: 0,
-    y: 0,
-    frame: false, // No title bar — kiosk style
-    fullscreen: true,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    minimizable: false,
-    maximizable: false,
-    closable: false,
-    resizable: false,
+    width: isDev ? 500 : display.size.width,
+    height: isDev ? 700 : display.size.height,
+    x: isDev ? 100 : 0,
+    y: isDev ? 100 : 0,
+    frame: isDev, // Dev: có title bar | Prod: không
+    fullscreen: !isDev, // Dev: windowed | Prod: fullscreen
+    alwaysOnTop: !isDev,
+    skipTaskbar: !isDev,
+    minimizable: isDev,
+    maximizable: isDev,
+    closable: isDev,
+    resizable: isDev,
     webPreferences: {
       preload: path.join(__dirname, "../preload/preload.js"),
       contextIsolation: true,
@@ -737,8 +738,6 @@ function createWindow(): void {
       });
     },
   );
-
-  const isDev = process.env.NODE_ENV === "development";
 
   if (isDev) {
     void mainWindow.loadURL("http://localhost:5173");
