@@ -18,9 +18,12 @@ import path from "path";
 import { lockSystem, unlockSystem, startProcessMonitor } from "./system-lock";
 
 // ─── Configuration ───────────────────────────────────────────────────────────
-const IPC_PORT = 4001;
+const IPC_PORT = 4000;
 const IPC_SECRET = "netcafe-secret-2024";
-const ELECTRON_APP_PATH = path.resolve(__dirname, "../../station-agent.exe");
+const ELECTRON_APP_PATH = path.resolve(
+  __dirname,
+  "../../StationAgent Setup 1.2.0.exe",
+);
 const PROCESS_MONITOR_INTERVAL = 3000;
 
 // ─── State ───────────────────────────────────────────────────────────────────
