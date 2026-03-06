@@ -750,9 +750,7 @@ function createWindow(): void {
     mainWindow.show();
     mainWindow.webContents.openDevTools({ mode: "detach" });
   } else {
-    void mainWindow.loadFile(
-      path.join(__dirname, "../../src/renderer/dist/index.html"),
-    );
+    void mainWindow.loadFile(path.join(__dirname, "../../renderer/index.html"));
     // Production: start in kiosk mode (locked)
     mainWindow.show();
     applyKioskMode();
