@@ -24,7 +24,7 @@ const { Service } = require("node-windows") as {
 // Trỏ tới file JS đã compile
 const SERVICE_SCRIPT = path.resolve(
   __dirname,
-  "../../dist/service/station-service.js",
+  "../../dist/main/service/station-service.js",
 );
 
 const svc = new Service({
