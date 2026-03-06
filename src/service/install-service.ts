@@ -21,7 +21,11 @@ const { Service } = require("node-windows") as {
     exists: boolean;
   };
 };
-const SERVICE_SCRIPT = path.join(__dirname, "station-service.js");
+// Trỏ tới file JS đã compile
+const SERVICE_SCRIPT = path.resolve(
+  __dirname,
+  "../../dist/service/station-service.js",
+);
 
 const svc = new Service({
   name: "NetCafeStationAgent",

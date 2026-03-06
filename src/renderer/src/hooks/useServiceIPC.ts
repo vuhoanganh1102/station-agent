@@ -1,7 +1,7 @@
 // src/hooks/useServiceIPC.ts
 import { useState, useEffect, useCallback, useRef } from "react";
 import { ServiceState, SessionWarning, TimerData } from "../../../types";
-const IPC_PORT = 4000;
+const IPC_PORT = 4001;
 const IPC_SECRET = "netcafe-secret-2024";
 
 interface UseServiceIPCReturn {
@@ -74,9 +74,7 @@ export function useServiceIPC(): UseServiceIPCReturn {
 
     function connect(): void {
       try {
-        const ws = new WebSocket(
-          `wss://daniel-unforetellable-uncorrelatively.ngrok-free.dev/ws`,
-        );
+        const ws = new WebSocket(`ws://127.0.0.1:4001`);
         wsRef.current = ws;
 
         ws.onopen = () => {

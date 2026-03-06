@@ -33,10 +33,7 @@ let connectedClient: WebSocket | null = null;
 let processMonitorId: NodeJS.Timeout | null = null;
 
 // ─── IPC WebSocket Server ────────────────────────────────────────────────────
-const wss = new WebSocketServer({
-  path: "wss://daniel-unforetellable-uncorrelatively.ngrok-free.dev/ws",
-});
-
+const wss = new WebSocketServer({ port: 4001, host: "127.0.0.1" });
 console.log(`[Service] IPC server listening on ws://127.0.0.1:${IPC_PORT}`);
 
 wss.on("connection", (ws) => {
