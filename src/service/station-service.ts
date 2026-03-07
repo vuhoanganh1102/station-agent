@@ -18,7 +18,7 @@ import path from "path";
 import { lockSystem, unlockSystem, startProcessMonitor } from "./system-lock";
 
 // ─── Configuration ───────────────────────────────────────────────────────────
-const IPC_PORT = 4000;
+const IPC_PORT = 4001;
 const IPC_SECRET = "netcafe-secret-2024";
 const ELECTRON_APP_PATH = path.resolve(
   __dirname,
@@ -216,7 +216,7 @@ function init(): void {
   // 3. Start Electron app (for the login GUI)
   // Note: In production, Electron app should auto-start via registry
   // or the service launches it in the user session
-  // startElectronApp(); // Uncomment when paths are configured
+  startElectronApp(); // Uncomment when paths are configured
 
   console.log("[Service] ✅ Service initialized — waiting for connections");
 }
