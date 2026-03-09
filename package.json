@@ -34,7 +34,17 @@
       "node_modules/node-gyp-build/**/*",
       "**/*.node"
     ],
-    "extraResources": [],
+    "extraResources": [
+      {
+        "from": "dist/main/service",
+        "to": "service",
+        "filter": ["**/*.js"]
+      },
+      {
+        "from": "node_modules/node-windows",
+        "to": "node_modules/node-windows"
+      }
+    ],
     "win": {
       "target": [
         "nsis"

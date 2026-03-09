@@ -39,6 +39,67 @@ let isStationLocked = true; // Start locked — user must login
 const stationId: string = config.STATION_ID || os.hostname();
 const serverUrl = `https://daniel-unforetellable-uncorrelatively.ngrok-free.dev`;
 
+// ─── SERVICE IPC CLIENT ───────────────────────────────────────────────────────
+// Connects to the Windows service (station-service.js) running at port 4001.
+// Relays service state/timer events to the renderer via webContents.send().
+const SERVICE_PORT = 4001;
+const SERVICE_SECRET = "netcafe-secret-2024";
+let serviceWs: import("ws").WebSocket | null = null;
+let serviceReconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+function connectToService(): void {
+  if (serviceReconnectTimer) {
+    clearTimeout(serviceReconnectTimer);
+    serviceReconnectTimer = null;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { WebSocket: WS } = require("ws") as typeof import("ws");
+  const ws = new WS(`ws://127.0.0.1:${SERVICE_PORT}`);
+  serviceWs = ws;
+
+  ws.on("open", () => {
+    console.log("[Service IPC] Connected to station-service");
+    ws.send(JSON.stringify({ type: "GET_STATE", secret: SERVICE_SECRET }));
+  });
+
+  ws.on("message", (raw: Buffer) => {
+    try {
+      const msg = JSON.parse(raw.toString()) as { type: string; payload?: unknown };
+      switch (msg.type) {
+        case "STATE":
+          mainWindow?.webContents.send("service-state", msg.payload);
+          break;
+        case "TIMER_UPDATE":
+          mainWindow?.webContents.send("timer-update", msg.payload);
+          break;
+        case "SESSION_WARNING":
+          mainWindow?.webContents.send("session-warning", msg.payload);
+          break;
+        case "SESSION_EXPIRED":
+          mainWindow?.webContents.send("session-expired");
+          break;
+      }
+    } catch (_) { /* ignore */ }
+  });
+
+  ws.on("close", () => {
+    console.log("[Service IPC] Disconnected — reconnecting in 3s");
+    serviceWs = null;
+    serviceReconnectTimer = setTimeout(connectToService, 3000);
+  });
+
+  ws.on("error", () => {
+    ws.terminate();
+  });
+}
+
+function sendToService(type: string, payload?: Record<string, unknown>): void {
+  if (serviceWs?.readyState === 1 /* OPEN */) {
+    serviceWs.send(JSON.stringify({ type, payload, secret: SERVICE_SECRET }));
+  }
+}
+
 // ─── SYSTEM INFO ─────────────────────────────────────────────────────────────
 function getLocalIP(): string {
   const interfaces = os.networkInterfaces();
@@ -582,6 +643,12 @@ function setupIPC(): void {
         // Disable kiosk mode — give user desktop access
         disableKioskMode();
 
+        // Notify station-service to unlock system policies
+        sendToService("LOGIN_SUCCESS", {
+          username: result.username ?? "",
+          sessionMinutes: result.sessionMinutes ?? 0,
+        });
+
         // Notify server that station is now in use
         socket?.emit("status-update", {
           status: "in-use",
@@ -603,6 +670,9 @@ function setupIPC(): void {
     // Re-enable kiosk mode
     mainWindow?.show();
     applyKioskMode();
+
+    // Notify station-service to re-lock system policies
+    sendToService("LOGOUT");
 
     // Notify server
     socket?.emit("status-update", {
@@ -787,6 +857,7 @@ app.on("ready", async () => {
   setupIPC();
   await initRobot();
   connectToServer();
+  connectToService();
 
   if (process.env.NODE_ENV !== "development") {
     app.setLoginItemSettings({ openAtLogin: true, path: app.getPath("exe") });

@@ -7,28 +7,24 @@
  * Nhiệm vụ:
  * 1. Lock hệ thống (block Task Manager, regedit, services.msc...)
  * 2. Mở IPC server (WebSocket localhost:4001) để Electron app kết nối
- * 3. Monitor Electron app — restart nếu bị kill
- * 4. Nhận lệnh lock/unlock từ Electron app khi user login/logout
- * 5. Process monitoring — kill blocked apps liên tục
+ * 3. Nhận lệnh lock/unlock từ Electron app khi user login/logout
+ * 4. Process monitoring — kill blocked apps liên tục
+ *
+ * NOTE: Electron app tự khởi động qua Windows Registry Run key
+ * (app.setLoginItemSettings trong main.ts). Service KHÔNG spawn Electron
+ * vì service chạy ở Session 0 — không có desktop, không hiển thị GUI được.
  */
 
 import { WebSocketServer, WebSocket } from "ws";
-import { spawn, ChildProcess } from "child_process";
-import path from "path";
 import { lockSystem, unlockSystem, startProcessMonitor } from "./system-lock";
 
 // ─── Configuration ───────────────────────────────────────────────────────────
 const IPC_PORT = 4001;
 const IPC_SECRET = "netcafe-secret-2024";
-const ELECTRON_APP_PATH = path.resolve(
-  __dirname,
-  "../../StationAgent Setup 1.2.0.exe",
-);
 const PROCESS_MONITOR_INTERVAL = 3000;
 
 // ─── State ───────────────────────────────────────────────────────────────────
 let isLocked = true; // Start locked — user must login
-let electronProcess: ChildProcess | null = null;
 let connectedClient: WebSocket | null = null;
 let processMonitorId: NodeJS.Timeout | null = null;
 
@@ -161,45 +157,9 @@ function stopProcessMonitor(): void {
   }
 }
 
-// ─── Electron App Monitor ────────────────────────────────────────────────────
-function startElectronApp(): void {
-  if (electronProcess) return;
-
-  try {
-    console.log(`[Service] Starting Electron app: ${ELECTRON_APP_PATH}`);
-
-    electronProcess = spawn(ELECTRON_APP_PATH, [], {
-      detached: false,
-      stdio: "ignore",
-      // Run in user session (Session 1) — not Session 0 (service session)
-      // Note: For this to work properly, the service needs to interact with desktop
-      // or use a helper to launch in the user's session
-    });
-
-    electronProcess.on("exit", (code) => {
-      console.log(`[Service] Electron app exited with code ${code}`);
-      electronProcess = null;
-
-      // Restart after delay if station is locked (prevent user from killing it)
-      if (isLocked) {
-        console.log("[Service] Station locked — restarting Electron in 3s...");
-        setTimeout(startElectronApp, 3000);
-      }
-    });
-
-    electronProcess.on("error", (err) => {
-      console.error("[Service] Failed to start Electron:", err.message);
-      electronProcess = null;
-      // Retry
-      setTimeout(startElectronApp, 5000);
-    });
-  } catch (e) {
-    console.error("[Service] Electron spawn error:", (e as Error).message);
-    setTimeout(startElectronApp, 5000);
-  }
-}
-
 // ─── Service Lifecycle ───────────────────────────────────────────────────────
+// NOTE: Electron app is launched via Windows Registry Run key (set by app.setLoginItemSettings).
+// Services run in Session 0 (no desktop) — cannot spawn GUI apps directly.
 function init(): void {
   console.log("========================================");
   console.log("  NetCafe Station Service");
@@ -213,11 +173,6 @@ function init(): void {
   // 2. Start process monitor
   startMonitor();
 
-  // 3. Start Electron app (for the login GUI)
-  // Note: In production, Electron app should auto-start via registry
-  // or the service launches it in the user session
-  startElectronApp(); // Uncomment when paths are configured
-
   console.log("[Service] ✅ Service initialized — waiting for connections");
 }
 
@@ -227,11 +182,6 @@ function shutdown(): void {
   stopProcessMonitor();
   unlockSystem(); // Remove restrictions on service stop
   wss.close();
-
-  if (electronProcess) {
-    electronProcess.kill();
-  }
-
   process.exit(0);
 }
 
