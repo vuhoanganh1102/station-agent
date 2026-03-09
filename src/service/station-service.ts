@@ -190,7 +190,7 @@ function init(): void {
   log("========================================");
 
   // 1. Apply system lockdown immediately
-  // lockSystem();
+  lockSystem();
 
   // 2. Start process monitor
   startMonitor();

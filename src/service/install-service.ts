@@ -26,7 +26,6 @@ const { Service } = require("node-windows") as {
 // via extraResources in package.json.
 // In development (ts-node from project root), use the compiled dist path.
 
-
 const SERVICE_SCRIPT = path.resolve(__dirname, "station-service.js");
 
 const svc = new Service({
