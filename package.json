@@ -19,7 +19,12 @@
     "build:win": "npm run build && electron-builder --win",
     "build:linux": "npm run build && electron-builder --linux",
     "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.renderer.json --noEmit",
-    "postinstall": "electron-builder install-app-deps"
+    "postinstall": "electron-builder install-app-deps",
+    "service:install": "npm run build:main && node dist/main/service/install-service.js install",
+    "service:uninstall": "node dist/main/service/install-service.js uninstall",
+    "service:start": "node dist/main/service/install-service.js start",
+    "service:stop": "node dist/main/service/install-service.js stop",
+    "service:status": "node dist/main/service/install-service.js status"
   },
   "build": {
     "appId": "com.remotenet.agent",

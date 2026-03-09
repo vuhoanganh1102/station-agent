@@ -25,12 +25,11 @@ const { Service } = require("node-windows") as {
 // In production (packaged .exe), service files are placed in resources/service/
 // via extraResources in package.json.
 // In development (ts-node from project root), use the compiled dist path.
-const isPackaged = process.argv[0].endsWith("StationAgent.exe") ||
-  process.argv[0].endsWith("electron.exe") === false && __dirname.includes("app.asar");
+const isPackaged = !!process.resourcesPath;
 
 const SERVICE_SCRIPT = isPackaged
-  ? path.join(process.resourcesPath ?? __dirname, "service", "station-service.js")
-  : path.resolve(__dirname, "../../dist/main/service/station-service.js");
+  ? path.join(process.resourcesPath, "service", "station-service.js")
+  : path.join(process.cwd(), "dist/main/service/station-service.js");
 
 const svc = new Service({
   name: "NetCafeStationAgent",
