@@ -27,9 +27,7 @@ const { Service } = require("node-windows") as {
 // In development (ts-node from project root), use the compiled dist path.
 const isPackaged = !!process.resourcesPath;
 
-const SERVICE_SCRIPT = isPackaged
-  ? path.join(process.resourcesPath, "service", "station-service.js")
-  : path.join(process.cwd(), "dist/main/service/station-service.js");
+const SERVICE_SCRIPT = path.resolve(__dirname, "station-service.js");
 
 const svc = new Service({
   name: "NetCafeStationAgent",

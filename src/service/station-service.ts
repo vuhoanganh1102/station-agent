@@ -36,9 +36,12 @@ function log(msg: string): void {
   console.log(line);
   try {
     const dir = path.dirname(LOG_FILE);
+
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     fs.appendFileSync(LOG_FILE, line + "\n");
-  } catch (_) { /* ignore write errors */ }
+  } catch (_) {
+    /* ignore write errors */
+  }
 }
 
 // ─── State ───────────────────────────────────────────────────────────────────
@@ -104,7 +107,9 @@ function handleIPCMessage(msg: {
   switch (msg.type) {
     case "LOGIN_SUCCESS": {
       const { username, sessionMinutes } = msg.payload ?? {};
-      log(`[Service] User login: ${String(username)} (${String(sessionMinutes)} min)`);
+      log(
+        `[Service] User login: ${String(username)} (${String(sessionMinutes)} min)`,
+      );
       isLocked = false;
       unlockSystem();
       stopProcessMonitor();
