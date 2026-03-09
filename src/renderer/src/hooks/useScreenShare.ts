@@ -167,68 +167,85 @@ export function useScreenShare(options: UseScreenShareOptions = {}) {
     }
 
     log("Registering screen share IPC listeners");
+    const cleanups: (() => void)[] = [];
 
-    // These handlers call through refs → always use latest function version
-    // Even though useEffect never re-runs, the refs update every render
+    // ── START screen share (from main process) ──
+    cleanups.push(
+      api.onStartScreenShare(({ adminSocketId }: { adminSocketId: string }) => {
+        log(`Received start-screen-share for admin: ${adminSocketId}`);
+        void startRef.current(adminSocketId);
+      }),
+    );
 
-    api.onStartScreenShare(({ adminSocketId }: { adminSocketId: any }) => {
-      log(`Received start-screen-share for admin: ${adminSocketId}`);
-      void startRef.current(adminSocketId);
-    });
+    // ── STOP screen share ──
+    cleanups.push(
+      api.onStopScreenShare(({ adminSocketId }: { adminSocketId: string }) => {
+        log(`Received stop-screen-share for admin: ${adminSocketId}`);
+        stopRef.current(adminSocketId);
+      }),
+    );
 
-    api.onStopScreenShare(({ adminSocketId }: { adminSocketId: any }) => {
-      log(`Received stop-screen-share for admin: ${adminSocketId}`);
-      stopRef.current(adminSocketId);
-    });
-
-    api.onWebRTCAnswer(
-      ({ adminSocketId, sdp }: { adminSocketId: any; sdp: any }) => {
-        const pc = peerConnectionsRef.current.get(adminSocketId);
-        if (!pc) {
-          log(`No PeerConnection found for admin ${adminSocketId}`);
-          return;
-        }
-
-        if (pc.signalingState !== "have-local-offer") {
+    // ── WebRTC ANSWER from admin (via main process) ──
+    cleanups.push(
+      api.onWebRTCAnswer(
+        ({ adminSocketId, sdp }: { adminSocketId: string; sdp: any }) => {
           log(
-            `Ignoring answer, state: ${pc.signalingState} (need have-local-offer)`,
+            `Received answer from admin: ${adminSocketId}, ` +
+              `known peers: [${[...peerConnectionsRef.current.keys()].join(", ")}]`,
           );
-          return;
-        }
 
-        if (!sdp || !sdp.type || !sdp.sdp) {
-          log(`Invalid answer SDP: ${JSON.stringify(sdp)}`);
-          return;
-        }
+          const pc = peerConnectionsRef.current.get(adminSocketId);
+          if (!pc) {
+            log(`No PeerConnection found for admin ${adminSocketId}`);
+            return;
+          }
 
-        pc.setRemoteDescription(
-          new RTCSessionDescription({ type: sdp.type, sdp: sdp.sdp }),
-        )
-          .then(() => log("✅ Set remote description (answer) OK"))
-          .catch((e) => log(`Error setting answer: ${(e as Error).message}`));
-      },
+          if (pc.signalingState !== "have-local-offer") {
+            log(
+              `Ignoring answer — state is "${pc.signalingState}", need "have-local-offer"`,
+            );
+            return;
+          }
+
+          if (!sdp || !sdp.type || !sdp.sdp) {
+            log(`Invalid answer SDP: ${JSON.stringify(sdp)}`);
+            return;
+          }
+
+          pc.setRemoteDescription(
+            new RTCSessionDescription({ type: sdp.type, sdp: sdp.sdp }),
+          )
+            .then(() => log("✅ Set remote description (answer) OK"))
+            .catch((e) => log(`Error setting answer: ${(e as Error).message}`));
+        },
+      ),
     );
 
-    api.onWebRTCIceCandidate(
-      ({
-        adminSocketId,
-        candidate,
-      }: {
-        adminSocketId: any;
-        candidate: any;
-      }) => {
-        const pc = peerConnectionsRef.current.get(adminSocketId);
-        if (!pc) return;
-        if (!candidate || !candidate.candidate) return;
+    // ── ICE candidates from admin ──
+    cleanups.push(
+      api.onWebRTCIceCandidate(
+        ({
+          adminSocketId,
+          candidate,
+        }: {
+          adminSocketId: string;
+          candidate: any;
+        }) => {
+          const pc = peerConnectionsRef.current.get(adminSocketId);
+          if (!pc) return;
+          if (!candidate || !candidate.candidate) return;
 
-        pc.addIceCandidate(new RTCIceCandidate(candidate)).catch((e) =>
-          log(`ICE error: ${(e as Error).message}`),
-        );
-      },
+          pc.addIceCandidate(new RTCIceCandidate(candidate)).catch((e) =>
+            log(`ICE error: ${(e as Error).message}`),
+          );
+        },
+      ),
     );
 
-    // Cleanup on unmount
+    // Cleanup on unmount (critical for HMR / dev mode)
     return () => {
+      log("CLEANUP: removing all IPC listeners");
+      cleanups.forEach((fn) => fn?.());
       peerConnectionsRef.current.forEach((_pc, adminId) => {
         stopRef.current(adminId);
       });

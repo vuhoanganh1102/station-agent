@@ -65,7 +65,10 @@ function connectToService(): void {
 
   ws.on("message", (raw: Buffer) => {
     try {
-      const msg = JSON.parse(raw.toString()) as { type: string; payload?: unknown };
+      const msg = JSON.parse(raw.toString()) as {
+        type: string;
+        payload?: unknown;
+      };
       switch (msg.type) {
         case "STATE":
           mainWindow?.webContents.send("service-state", msg.payload);
@@ -80,7 +83,9 @@ function connectToService(): void {
           mainWindow?.webContents.send("session-expired");
           break;
       }
-    } catch (_) { /* ignore */ }
+    } catch (_) {
+      /* ignore */
+    }
   });
 
   ws.on("close", () => {

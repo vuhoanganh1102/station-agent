@@ -11,31 +11,43 @@ import type {
 // Typed callback helpers
 type Callback<T> = (data: T) => void;
 type SimpleCallback = () => void;
+type Unsubscribe = () => void;
+
+/** Helper: register an IPC listener and return an unsubscribe function */
+function onIpc<T>(channel: string, callback: Callback<T>): Unsubscribe {
+  const handler = (_e: IpcRendererEvent, data: T) => callback(data);
+  ipcRenderer.on(channel, handler);
+  return () => ipcRenderer.removeListener(channel, handler);
+}
+
+/** Helper: register an IPC listener (no data) and return an unsubscribe function */
+function onIpcSimple(channel: string, callback: SimpleCallback): Unsubscribe {
+  const handler = () => callback();
+  ipcRenderer.on(channel, handler);
+  return () => ipcRenderer.removeListener(channel, handler);
+}
 
 // Build the exposed API with full types
 const agentAPI = {
   // ─── SCREEN CAPTURE ──────────────────────────────────────────────────
   getSources: (): Promise<ScreenSource[]> => ipcRenderer.invoke("get-sources"),
 
-  onSourcesList: (callback: Callback<ScreenSource[]>): void => {
+  onSourcesList: (callback: Callback<ScreenSource[]>): Unsubscribe => {
     ipcRenderer.removeAllListeners("sources-list");
-    ipcRenderer.once(
-      "sources-list",
-      (_event: IpcRendererEvent, sources: ScreenSource[]) => callback(sources),
-    );
+    const handler = (_event: IpcRendererEvent, sources: ScreenSource[]) =>
+      callback(sources);
+    ipcRenderer.once("sources-list", handler);
+    return () => ipcRenderer.removeListener("sources-list", handler);
   },
 
   // ─── SCREEN SHARING ──────────────────────────────────────────────────
-  onStartScreenShare: (callback: Callback<{ adminSocketId: string }>): void => {
-    ipcRenderer.on("start-screen-share", (_e: IpcRendererEvent, data) =>
-      callback(data),
-    );
-  },
-  onStopScreenShare: (callback: Callback<{ adminSocketId: string }>): void => {
-    ipcRenderer.on("stop-screen-share", (_e: IpcRendererEvent, data) =>
-      callback(data),
-    );
-  },
+  onStartScreenShare: (
+    callback: Callback<{ adminSocketId: string }>,
+  ): Unsubscribe => onIpc("start-screen-share", callback),
+
+  onStopScreenShare: (
+    callback: Callback<{ adminSocketId: string }>,
+  ): Unsubscribe => onIpc("stop-screen-share", callback),
 
   // ─── WEBRTC SIGNALING ─────────────────────────────────────────────────
   onWebRTCOffer: (
@@ -43,31 +55,22 @@ const agentAPI = {
       adminSocketId: string;
       sdp: RTCSessionDescriptionInit;
     }>,
-  ): void => {
-    ipcRenderer.on("webrtc-offer", (_e: IpcRendererEvent, data) =>
-      callback(data),
-    );
-  },
+  ): Unsubscribe => onIpc("webrtc-offer", callback),
+
   onWebRTCAnswer: (
     callback: Callback<{
       adminSocketId: string;
       sdp: RTCSessionDescriptionInit;
     }>,
-  ): void => {
-    ipcRenderer.on("webrtc-answer", (_e: IpcRendererEvent, data) =>
-      callback(data),
-    );
-  },
+  ): Unsubscribe => onIpc("webrtc-answer", callback),
+
   onWebRTCIceCandidate: (
     callback: Callback<{
       adminSocketId: string;
       candidate: RTCIceCandidateInit;
     }>,
-  ): void => {
-    ipcRenderer.on("webrtc-icecandidate", (_e: IpcRendererEvent, data) =>
-      callback(data),
-    );
-  },
+  ): Unsubscribe => onIpc("webrtc-icecandidate", callback),
+
   sendOffer: (data: {
     targetAdminId: string;
     sdp: RTCSessionDescriptionInit;
@@ -88,49 +91,27 @@ const agentAPI = {
   },
 
   // ─── REMOTE CONTROL ──────────────────────────────────────────────────
-  onMouseMove: (callback: Callback<unknown>): void => {
-    ipcRenderer.on("remote-mouse-move", (_e: IpcRendererEvent, data) =>
-      callback(data),
-    );
-  },
-  onMouseClick: (callback: Callback<unknown>): void => {
-    ipcRenderer.on("remote-mouse-click", (_e: IpcRendererEvent, data) =>
-      callback(data),
-    );
-  },
-  onMouseScroll: (callback: Callback<unknown>): void => {
-    ipcRenderer.on("remote-mouse-scroll", (_e: IpcRendererEvent, data) =>
-      callback(data),
-    );
-  },
-  onKeyTap: (callback: Callback<unknown>): void => {
-    ipcRenderer.on("remote-key-tap", (_e: IpcRendererEvent, data) =>
-      callback(data),
-    );
-  },
-  onKeyType: (callback: Callback<unknown>): void => {
-    ipcRenderer.on("remote-key-type", (_e: IpcRendererEvent, data) =>
-      callback(data),
-    );
-  },
+  onMouseMove: (callback: Callback<unknown>): Unsubscribe =>
+    onIpc("remote-mouse-move", callback),
+  onMouseClick: (callback: Callback<unknown>): Unsubscribe =>
+    onIpc("remote-mouse-click", callback),
+  onMouseScroll: (callback: Callback<unknown>): Unsubscribe =>
+    onIpc("remote-mouse-scroll", callback),
+  onKeyTap: (callback: Callback<unknown>): Unsubscribe =>
+    onIpc("remote-key-tap", callback),
+  onKeyType: (callback: Callback<unknown>): Unsubscribe =>
+    onIpc("remote-key-type", callback),
 
   // ─── ADMIN COMMANDS ──────────────────────────────────────────────────
-  onLock: (callback: SimpleCallback): void => {
-    ipcRenderer.on("lock-station", () => callback());
-  },
-  onUnlock: (callback: SimpleCallback): void => {
-    ipcRenderer.on("unlock-station", () => callback());
-  },
-  onShowMessage: (callback: Callback<{ message: string }>): void => {
-    ipcRenderer.on("show-message", (_e: IpcRendererEvent, data) =>
-      callback(data),
-    );
-  },
-  onTakeScreenshot: (callback: Callback<{ targetAdminId: string }>): void => {
-    ipcRenderer.on("take-screenshot", (_e: IpcRendererEvent, data) =>
-      callback(data),
-    );
-  },
+  onLock: (callback: SimpleCallback): Unsubscribe =>
+    onIpcSimple("lock-station", callback),
+  onUnlock: (callback: SimpleCallback): Unsubscribe =>
+    onIpcSimple("unlock-station", callback),
+  onShowMessage: (callback: Callback<{ message: string }>): Unsubscribe =>
+    onIpc("show-message", callback),
+  onTakeScreenshot: (
+    callback: Callback<{ targetAdminId: string }>,
+  ): Unsubscribe => onIpc("take-screenshot", callback),
   sendScreenshot: (data: { targetAdminId: string; image: string }): void => {
     ipcRenderer.send("screenshot-ready", data);
   },
@@ -144,30 +125,16 @@ const agentAPI = {
   getStationId: (): Promise<string> => ipcRenderer.invoke("get-station-id"),
 
   // ─── SERVICE STATE RELAY ─────────────────────────────────────────────
-  onServiceState: (callback: Callback<ServiceState>): void => {
-    ipcRenderer.on("service-state", (_e: IpcRendererEvent, data) =>
-      callback(data),
-    );
-  },
-  onTimerUpdate: (callback: Callback<TimerData>): void => {
-    ipcRenderer.on("timer-update", (_e: IpcRendererEvent, data) =>
-      callback(data),
-    );
-  },
-  onSessionWarning: (callback: Callback<SessionWarning>): void => {
-    ipcRenderer.on("session-warning", (_e: IpcRendererEvent, data) =>
-      callback(data),
-    );
-  },
-  onSessionExpired: (callback: SimpleCallback): void => {
-    ipcRenderer.on("session-expired", () => callback());
-  },
-  onServerConnected: (callback: Callback<boolean>): void => {
-    ipcRenderer.on(
-      "server-connected",
-      (_e: IpcRendererEvent, status: boolean) => callback(status),
-    );
-  },
+  onServiceState: (callback: Callback<ServiceState>): Unsubscribe =>
+    onIpc("service-state", callback),
+  onTimerUpdate: (callback: Callback<TimerData>): Unsubscribe =>
+    onIpc("timer-update", callback),
+  onSessionWarning: (callback: Callback<SessionWarning>): Unsubscribe =>
+    onIpc("session-warning", callback),
+  onSessionExpired: (callback: SimpleCallback): Unsubscribe =>
+    onIpcSimple("session-expired", callback),
+  onServerConnected: (callback: Callback<boolean>): Unsubscribe =>
+    onIpc("server-connected", callback),
 } as const;
 
 // Expose to renderer
