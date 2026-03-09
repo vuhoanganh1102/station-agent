@@ -17,11 +17,29 @@
 
 import { WebSocketServer, WebSocket } from "ws";
 import { lockSystem, unlockSystem, startProcessMonitor } from "./system-lock";
+import fs from "fs";
+import path from "path";
 
 // ─── Configuration ───────────────────────────────────────────────────────────
 const IPC_PORT = 4001;
 const IPC_SECRET = "netcafe-secret-2024";
 const PROCESS_MONITOR_INTERVAL = 3000;
+const LOG_FILE = path.join(
+  process.env["PROGRAMDATA"] ?? "C:\\ProgramData",
+  "NetCafeAgent",
+  "service.log",
+);
+
+// ─── Logger ──────────────────────────────────────────────────────────────────
+function log(msg: string): void {
+  const line = `[${new Date().toISOString()}] ${msg}`;
+  console.log(line);
+  try {
+    const dir = path.dirname(LOG_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.appendFileSync(LOG_FILE, line + "\n");
+  } catch (_) { /* ignore write errors */ }
+}
 
 // ─── State ───────────────────────────────────────────────────────────────────
 let isLocked = true; // Start locked — user must login
@@ -30,10 +48,10 @@ let processMonitorId: NodeJS.Timeout | null = null;
 
 // ─── IPC WebSocket Server ────────────────────────────────────────────────────
 const wss = new WebSocketServer({ port: 4001, host: "127.0.0.1" });
-console.log(`[Service] IPC server listening on ws://127.0.0.1:${IPC_PORT}`);
+log(`[Service] IPC server listening on ws://127.0.0.1:${IPC_PORT}`);
 
 wss.on("connection", (ws) => {
-  console.log("[Service] Electron app connected via IPC");
+  log("[Service] Electron app connected via IPC");
   connectedClient = ws;
 
   // Send current state immediately
@@ -52,23 +70,23 @@ wss.on("connection", (ws) => {
 
       // Validate secret
       if (msg.secret !== IPC_SECRET) {
-        console.warn("[Service] Invalid IPC secret");
+        log("[Service] WARN: Invalid IPC secret");
         return;
       }
 
       handleIPCMessage(msg);
     } catch (e) {
-      console.error("[Service] IPC parse error:", (e as Error).message);
+      log(`[Service] IPC parse error: ${(e as Error).message}`);
     }
   });
 
   ws.on("close", () => {
-    console.log("[Service] Electron app disconnected");
+    log("[Service] Electron app disconnected");
     connectedClient = null;
   });
 
   ws.on("error", (err) => {
-    console.error("[Service] IPC error:", err.message);
+    log(`[Service] IPC error: ${err.message}`);
   });
 });
 
@@ -86,9 +104,7 @@ function handleIPCMessage(msg: {
   switch (msg.type) {
     case "LOGIN_SUCCESS": {
       const { username, sessionMinutes } = msg.payload ?? {};
-      console.log(
-        `[Service] ✅ User login: ${username} (${sessionMinutes} min)`,
-      );
+      log(`[Service] User login: ${String(username)} (${String(sessionMinutes)} min)`);
       isLocked = false;
       unlockSystem();
       stopProcessMonitor();
@@ -105,7 +121,7 @@ function handleIPCMessage(msg: {
     }
 
     case "LOGOUT": {
-      console.log("[Service] 🔒 User logout — locking system");
+      log("[Service] User logout — locking system");
       isLocked = true;
       lockSystem();
       startMonitor();
@@ -117,7 +133,7 @@ function handleIPCMessage(msg: {
     }
 
     case "SESSION_EXPIRED": {
-      console.log("[Service] ⏰ Session expired — locking system");
+      log("[Service] Session expired — locking system");
       isLocked = true;
       lockSystem();
       startMonitor();
@@ -139,7 +155,7 @@ function handleIPCMessage(msg: {
     }
 
     default:
-      console.log(`[Service] Unknown IPC message type: ${msg.type}`);
+      log(`[Service] Unknown IPC message type: ${msg.type}`);
   }
 }
 
@@ -153,7 +169,7 @@ function stopProcessMonitor(): void {
   if (processMonitorId) {
     clearInterval(processMonitorId);
     processMonitorId = null;
-    console.log("[Service] Process monitor stopped");
+    log("[Service] Process monitor stopped");
   }
 }
 
@@ -161,11 +177,12 @@ function stopProcessMonitor(): void {
 // NOTE: Electron app is launched via Windows Registry Run key (set by app.setLoginItemSettings).
 // Services run in Session 0 (no desktop) — cannot spawn GUI apps directly.
 function init(): void {
-  console.log("========================================");
-  console.log("  NetCafe Station Service");
-  console.log(`  IPC Port: ${IPC_PORT}`);
-  console.log(`  State: LOCKED`);
-  console.log("========================================");
+  log("========================================");
+  log("  NetCafe Station Service");
+  log(`  IPC Port: ${IPC_PORT}`);
+  log(`  Log file: ${LOG_FILE}`);
+  log(`  State: LOCKED`);
+  log("========================================");
 
   // 1. Apply system lockdown immediately
   lockSystem();
@@ -173,12 +190,12 @@ function init(): void {
   // 2. Start process monitor
   startMonitor();
 
-  console.log("[Service] ✅ Service initialized — waiting for connections");
+  log("[Service] Service initialized — waiting for connections");
 }
 
 // ─── Graceful Shutdown ───────────────────────────────────────────────────────
 function shutdown(): void {
-  console.log("[Service] Shutting down...");
+  log("[Service] Shutting down...");
   stopProcessMonitor();
   unlockSystem(); // Remove restrictions on service stop
   wss.close();
@@ -187,6 +204,13 @@ function shutdown(): void {
 
 process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);
+process.on("uncaughtException", (err) => {
+  log(`[Service] UNCAUGHT EXCEPTION: ${err.message}\n${err.stack ?? ""}`);
+  process.exit(1);
+});
+process.on("unhandledRejection", (reason) => {
+  log(`[Service] UNHANDLED REJECTION: ${String(reason)}`);
+});
 
 // ─── Start ───────────────────────────────────────────────────────────────────
 init();
