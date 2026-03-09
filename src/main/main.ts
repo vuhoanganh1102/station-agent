@@ -776,8 +776,10 @@ function createWindow(): void {
 }
 
 // ─── APP LIFECYCLE ────────────────────────────────────────────────────────────
-app.commandLine.appendSwitch("enable-features", "WebRTCPipeWireCapturer");
+// Allow screen capture without OS permission prompt on Windows
 app.commandLine.appendSwitch("use-fake-ui-for-media-stream");
+// Required for getUserMedia with chromeMediaSource on Windows
+app.commandLine.appendSwitch("enable-features", "DesktopCaptureApi");
 
 app.on("ready", async () => {
   createWindow();

@@ -171,51 +171,61 @@ export function useScreenShare(options: UseScreenShareOptions = {}) {
     // These handlers call through refs → always use latest function version
     // Even though useEffect never re-runs, the refs update every render
 
-    api.onStartScreenShare(({ adminSocketId }) => {
+    api.onStartScreenShare(({ adminSocketId }: { adminSocketId: any }) => {
       log(`Received start-screen-share for admin: ${adminSocketId}`);
       void startRef.current(adminSocketId);
     });
 
-    api.onStopScreenShare(({ adminSocketId }) => {
+    api.onStopScreenShare(({ adminSocketId }: { adminSocketId: any }) => {
       log(`Received stop-screen-share for admin: ${adminSocketId}`);
       stopRef.current(adminSocketId);
     });
 
-    api.onWebRTCAnswer(({ adminSocketId, sdp }) => {
-      const pc = peerConnectionsRef.current.get(adminSocketId);
-      if (!pc) {
-        log(`No PeerConnection found for admin ${adminSocketId}`);
-        return;
-      }
+    api.onWebRTCAnswer(
+      ({ adminSocketId, sdp }: { adminSocketId: any; sdp: any }) => {
+        const pc = peerConnectionsRef.current.get(adminSocketId);
+        if (!pc) {
+          log(`No PeerConnection found for admin ${adminSocketId}`);
+          return;
+        }
 
-      if (pc.signalingState !== "have-local-offer") {
-        log(
-          `Ignoring answer, state: ${pc.signalingState} (need have-local-offer)`,
+        if (pc.signalingState !== "have-local-offer") {
+          log(
+            `Ignoring answer, state: ${pc.signalingState} (need have-local-offer)`,
+          );
+          return;
+        }
+
+        if (!sdp || !sdp.type || !sdp.sdp) {
+          log(`Invalid answer SDP: ${JSON.stringify(sdp)}`);
+          return;
+        }
+
+        pc.setRemoteDescription(
+          new RTCSessionDescription({ type: sdp.type, sdp: sdp.sdp }),
+        )
+          .then(() => log("✅ Set remote description (answer) OK"))
+          .catch((e) => log(`Error setting answer: ${(e as Error).message}`));
+      },
+    );
+
+    api.onWebRTCIceCandidate(
+      ({
+        adminSocketId,
+        candidate,
+      }: {
+        adminSocketId: any;
+        candidate: any;
+      }) => {
+        const pc = peerConnectionsRef.current.get(adminSocketId);
+        if (!pc) return;
+        if (!candidate || !candidate.candidate) return;
+
+        pc.addIceCandidate(new RTCIceCandidate(candidate)).catch((e) =>
+          log(`ICE error: ${(e as Error).message}`),
         );
-        return;
-      }
-
-      if (!sdp || !sdp.type || !sdp.sdp) {
-        log(`Invalid answer SDP: ${JSON.stringify(sdp)}`);
-        return;
-      }
-
-      pc.setRemoteDescription(
-        new RTCSessionDescription({ type: sdp.type, sdp: sdp.sdp }),
-      )
-        .then(() => log("✅ Set remote description (answer) OK"))
-        .catch((e) => log(`Error setting answer: ${(e as Error).message}`));
-    });
-
-    api.onWebRTCIceCandidate(({ adminSocketId, candidate }) => {
-      const pc = peerConnectionsRef.current.get(adminSocketId);
-      if (!pc) return;
-      if (!candidate || !candidate.candidate) return;
-
-      pc.addIceCandidate(new RTCIceCandidate(candidate)).catch((e) =>
-        log(`ICE error: ${(e as Error).message}`),
-      );
-    });
+      },
+    );
 
     // Cleanup on unmount
     return () => {
